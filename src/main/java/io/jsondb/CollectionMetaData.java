@@ -32,7 +32,9 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.reflections.Reflections;
+import io.github.classgraph.ClassGraph;
+import io.github.classgraph.ClassInfo;
+import io.github.classgraph.ScanResult;
 
 import io.jsondb.annotation.Document;
 import io.jsondb.annotation.Id;
@@ -225,16 +227,19 @@ public class CollectionMetaData {
    * @return A Map of collection classes/POJOs
    */
   public static Map<String, CollectionMetaData> builder(JsonDBConfig dbConfig) {
-    Map<String, CollectionMetaData> collectionMetaData = new LinkedHashMap<String, CollectionMetaData>();
-    Reflections reflections = new Reflections(dbConfig.getBaseScanPackage());
-    Set<Class<?>> docClasses = reflections.getTypesAnnotatedWith(Document.class);
-    for (Class<?> c : docClasses) {
-      Document d = c.getAnnotation(Document.class);
-      String collectionName = d.collection();
-      String version = d.schemaVersion();
-      CollectionMetaData cmd = new CollectionMetaData(collectionName, c, version, dbConfig.getSchemaComparator());
-      collectionMetaData.put(collectionName, cmd);
+    Map<String, CollectionMetaData> collectionMetaData = new LinkedHashMap<>();
+
+    try (ScanResult scanResult = new ClassGraph().enableAllInfo().acceptPackages(dbConfig.getBaseScanPackage()).scan()) {
+      for (ClassInfo c : scanResult.getClassesWithAnnotation(Document.class)) {
+        Class<?> clazz = c.loadClass();
+        Document d = clazz.getAnnotation(Document.class);
+        String collectionName = d.collection();
+        String version = d.schemaVersion();
+        CollectionMetaData cmd = new CollectionMetaData(collectionName, clazz, version, dbConfig.getSchemaComparator());
+        collectionMetaData.put(collectionName, cmd);
+      }
     }
+
     return collectionMetaData;
   }
 }
